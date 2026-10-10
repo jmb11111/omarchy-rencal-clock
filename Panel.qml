@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Controls as QQC
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -23,6 +24,22 @@ Panel {
   manageIpc: false
 
   property var anchorItem: null
+
+  // The life-bar fields take a few digits, so they take no paste at all:
+  // Qt reads the whole clipboard before any length check, and a foreign
+  // Wayland source that keeps streaming could exhaust memory and stall the
+  // shell. Shortcut, middle-click (primary selection) and the edit menu are
+  // all closed; typed input is capped by maximumLength.
+  component DigitField: TextField {
+    inputMethodHints: Qt.ImhDigitsOnly
+    QQC.ContextMenu.menu: null
+
+    MouseArea {
+      anchors.fill: parent
+      acceptedButtons: Qt.MiddleButton | Qt.RightButton
+      onPressed: function(mouse) { mouse.accepted = true }
+    }
+  }
 
   // The bar tracks the widget mounted in its slot — BarWidget.qml — not this
   // nested panel. Everything the bar identifies a panel by has to be that
@@ -331,7 +348,9 @@ Panel {
   // Shared by both fields: Tab hops to the other one, Enter commits the pair,
   // Escape drops the lot.
   function handleLifeKey(event, other) {
-    if (event.key === Qt.Key_Escape) {
+    if (event.matches(StandardKey.Paste)) {
+      event.accepted = true
+    } else if (event.key === Qt.Key_Escape) {
       root.cancelEditingLife()
       event.accepted = true
     } else if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
@@ -568,14 +587,14 @@ Panel {
                   font.letterSpacing: 1
                 }
 
-                TextField {
+                DigitField {
                   id: bornField
                   width: Style.space(70)
                   anchors.verticalCenter: parent.verticalCenter
+                  maximumLength: 4
                   placeholderText: "year"
                   foreground: root.contentForeground
                   font.family: root.contentFontFamily
-                  inputMethodHints: Qt.ImhDigitsOnly
 
                   Keys.onPressed: function(event) { root.handleLifeKey(event, expectancyField) }
                 }
@@ -591,14 +610,14 @@ Panel {
                   font.letterSpacing: 1
                 }
 
-                TextField {
+                DigitField {
                   id: expectancyField
                   width: Style.space(60)
                   anchors.verticalCenter: parent.verticalCenter
+                  maximumLength: 3
                   placeholderText: "90"
                   foreground: root.contentForeground
                   font.family: root.contentFontFamily
-                  inputMethodHints: Qt.ImhDigitsOnly
 
                   Keys.onPressed: function(event) { root.handleLifeKey(event, bornField) }
                 }

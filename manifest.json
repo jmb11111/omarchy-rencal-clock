@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "jmb11111.rencal-clock",
   "name": "renCal Clock",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "author": "jmb11111",
   "license": "MIT",
   "description": "Omarchy's clock and calendar popup, plus your upcoming renCal events with one-click Join buttons for video calls.",
