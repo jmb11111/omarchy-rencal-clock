@@ -29,6 +29,10 @@ LIMIT = int(args[1]) if len(args) > 1 else 8
 # Google's working-location entries ("Home", "Office") arrive as all-day
 # events on every workday; they say where you are, not what you're doing.
 HIDE_WORKING_LOCATION = "--hide-working-location" in sys.argv
+# --date=YYYY-MM-DD switches from "what's next" to "everything on that day",
+# for a day clicked in the month grid. The day is the local calendar day.
+DAY = next((date.fromisoformat(a.split("=", 1)[1]) for a in sys.argv[1:] if a.startswith("--date=")), None)
+DAY_LIMIT = 50
 
 # Mirrors renCal's own detection (src/lib/conference.ts) so the panel offers a
 # Join button for exactly the events renCal itself would.
@@ -138,7 +142,12 @@ def main():
         return
 
     now = datetime.now().astimezone()
-    window_end = now + timedelta(days=DAYS_AHEAD)
+    if DAY:
+        window_start = datetime.combine(DAY, time.min).astimezone()
+        window_end = datetime.combine(DAY + timedelta(days=1), time.min).astimezone()
+    else:
+        window_start = now
+        window_end = now + timedelta(days=DAYS_AHEAD)
     events = []
     calendars = 0
 
@@ -151,7 +160,7 @@ def main():
         recurring_uids = set()
         cal = load_calendar(path, recurring_uids)
         try:
-            occurrences = recurring_ical_events.of(cal).between(now - timedelta(days=1), window_end)
+            occurrences = recurring_ical_events.of(cal).between(window_start - timedelta(days=1), window_end)
         except Exception:
             continue
 
@@ -173,7 +182,10 @@ def main():
                 end = start + event.get("DURATION").dt
             else:
                 end = start + (timedelta(days=1) if all_day else timedelta(0))
-            if end <= now:
+            # Anything still running at the window's start counts, so a
+            # meeting already under way (or a trip spanning the clicked day)
+            # is listed rather than lost.
+            if end <= window_start or start >= window_end:
                 continue
 
             meeting = meeting_for(event)
@@ -191,7 +203,7 @@ def main():
             })
 
     events.sort(key=lambda e: (e["start"], not e["allDay"], e["title"]))
-    print(json.dumps({"ok": True, "events": events[:LIMIT], "calendars": calendars}))
+    print(json.dumps({"ok": True, "events": events[:DAY_LIMIT if DAY else LIMIT], "calendars": calendars}))
 
 
 if __name__ == "__main__":

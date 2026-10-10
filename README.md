@@ -16,6 +16,8 @@ progress), with an **Upcoming** section added under the grid:
 - Events with a Google Meet, Zoom, Microsoft Teams, Webex, Jitsi, Whereby or
   Proton Meet link get a **Join** button. It turns accent-coloured from ten
   minutes before the start until the meeting ends, the same window renCal uses.
+- Click a day in the month grid to list that day's events instead, past days
+  included. The back arrow, Esc, or clicking the day again returns to Upcoming.
 - The list refreshes when the popup opens and every minute while it is open.
 
 ## Requirements
@@ -58,11 +60,21 @@ else needs them.
 | Left click the clock | Open the popup |
 | Right click | Cycle the label format |
 | Middle click | Timezone picker |
+| Click a day | Show that day's events |
+| Back arrow / `Esc` | Back to Upcoming (`Esc` again closes the popup) |
 | Click an event | Open it in renCal |
 | **Join** | Open the meeting link |
 | `j` | Join the meeting that is on now or about to start |
 | `o` | Open renCal |
-| `[` `]` / `{` `}` / `t` / `w` | Previous/next month, previous/next year, today, toggle week start |
+| `[` `]` / `{` `}` / `t` / `w` | Previous/next month, previous/next year, today (and back to Upcoming), toggle week start |
+
+The same views are reachable over IPC, e.g. for keybindings:
+
+```bash
+omarchy-shell omarchy.clock toggle
+omarchy-shell omarchy.clock showDay 2026-10-17
+omarchy-shell omarchy.clock showUpcoming
+```
 
 ## Settings
 

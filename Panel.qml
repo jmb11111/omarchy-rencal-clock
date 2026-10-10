@@ -89,6 +89,13 @@ Panel {
   readonly property int maxEvents: Math.max(1, Math.min(30, Number(setting("maxEvents", 8)) || 8))
   readonly property bool hideWorkingLocation: setting("hideWorkingLocation", true) === true
 
+  // A day clicked in the grid swaps the Upcoming list for that day's events;
+  // "" is the Upcoming view. fetchedDayKey is the view the running fetch was
+  // started for, so a slow answer for one view never lands in the other.
+  property string selectedDayKey: ""
+  property string fetchedDayKey: ""
+  property bool eventsStale: false
+
   // Guarded so the widget renders before the bar is injected (the bar-widget
   // contract instantiates it bare).
   readonly property color contentForeground: bar ? bar.foreground : Color.foreground
@@ -139,16 +146,69 @@ Panel {
       root.bar.centerHoverRevealSuppressed = value
   }
 
+  // Every opening starts from Upcoming, whichever day was picked last time.
   function refresh() {
     root.today = new Date()
     root.goToToday()
-    root.refreshEvents()
+    if (root.selectedDayKey !== "") root.clearDay()
+    else root.refreshEvents()
   }
 
   function refreshEvents() {
     root.nowMs = Date.now()
-    if (!eventsProc.running) eventsProc.running = true
+    if (eventsProc.running) {
+      root.eventsStale = true
+      return
+    }
+    root.startEventsFetch()
   }
+
+  function startEventsFetch() {
+    root.eventsStale = false
+    root.fetchedDayKey = root.selectedDayKey
+    eventsProc.command = ["python3", "-I", root.upcomingScript, String(root.daysAhead), String(root.maxEvents)]
+      .concat(root.hideWorkingLocation ? ["--hide-working-location"] : [])
+      .concat(root.selectedDayKey !== "" ? ["--date=" + root.selectedDayKey] : [])
+    eventsProc.running = true
+  }
+
+  // Switching views blanks the list until the new one arrives, rather than
+  // showing the old view's events under the new heading.
+  function showDay(key) {
+    root.selectedDayKey = key
+    root.upcomingEvents = []
+    root.upcomingState = "loading"
+    root.refreshEvents()
+  }
+
+  // Clicking the picked day again is the same as the back button. A day from
+  // a neighbouring month brings that month on screen with it.
+  function selectDay(day) {
+    if (day.key === root.selectedDayKey) {
+      root.clearDay()
+      return
+    }
+    if (!day.inMonth) {
+      root.viewYear = day.year
+      root.viewMonth = day.month
+    }
+    root.showDay(day.key)
+  }
+
+  function clearDay() {
+    if (root.selectedDayKey === "") return
+    root.showDay("")
+  }
+
+  function dateFromKey(key) {
+    var parts = String(key).split("-")
+    return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]))
+  }
+
+  readonly property string listHeading: selectedDayKey === ""
+    ? "UPCOMING"
+    : ((selectedDayKey === String(todayKey) ? "TODAY · " : "")
+      + labelLocale.toString(dateFromKey(selectedDayKey), "dddd d MMMM")).toUpperCase()
 
   function inJoinWindow(event) {
     return event.joinUrl !== "" && root.nowMs >= event.start - root.joinLeadMs && root.nowMs < event.end
@@ -166,9 +226,23 @@ Panel {
   function eventWhen(event) {
     var startTime = Qt.formatTime(new Date(event.start), "HH:mm")
     var endTime = Qt.formatTime(new Date(event.end), "HH:mm")
+    if (root.selectedDayKey !== "") return dayEventWhen(event, startTime, endTime)
     if (event.allDay) return (event.start <= root.nowMs ? "Today" : eventDayLabel(event.start)) + " · All day"
     if (event.start <= root.nowMs) return "Now · until " + endTime
     return eventDayLabel(event.start) + " · " + startTime + " – " + endTime
+  }
+
+  // On a picked day the day is in the heading, so rows give times only, and
+  // name the other day for an event running in from or on past midnight.
+  function dayEventWhen(event, startTime, endTime) {
+    if (event.allDay) return "All day"
+    var day = root.dateFromKey(root.selectedDayKey)
+    var dayStart = day.getTime()
+    var dayEnd = new Date(day.getFullYear(), day.getMonth(), day.getDate() + 1).getTime()
+    var from = event.start < dayStart ? root.labelLocale.toString(new Date(event.start), "ddd HH:mm") : startTime
+    var to = event.end > dayEnd ? root.labelLocale.toString(new Date(event.end), "ddd HH:mm") : endTime
+    var live = event.start <= root.nowMs && root.nowMs < event.end
+    return (live ? "Now · " : "") + from + " – " + to
   }
 
   // Event text comes from other people's invites, so everything goes out as
@@ -317,11 +391,13 @@ Panel {
 
   Process {
     id: eventsProc
-    command: ["python3", "-I", root.upcomingScript, String(root.daysAhead), String(root.maxEvents)]
-      .concat(root.hideWorkingLocation ? ["--hide-working-location"] : [])
+    // A view change or refresh asked for while this was running: go again
+    // now that it has finished.
+    onRunningChanged: if (!running && root.eventsStale) Qt.callLater(root.startEventsFetch)
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
+        if (root.fetchedDayKey !== root.selectedDayKey) return
         try {
           var parsed = JSON.parse(String(text || "").trim())
           if (parsed.ok) {
@@ -360,14 +436,21 @@ Panel {
         if (dy !== 0) root.moveYear(dy)
       }
       onActivateRequested: root.goToToday()
-      onCloseRequested: root.close()
+      // Escape backs out of a picked day before it closes the panel.
+      onCloseRequested: {
+        if (root.selectedDayKey !== "") root.clearDay()
+        else root.close()
+      }
       onTabRequested: function(direction) { root.switchPanel(direction) }
       onTextKey: function(t) {
         if (t === "[") root.moveMonth(-1)
         else if (t === "]") root.moveMonth(1)
         else if (t === "{") root.moveYear(-1)
         else if (t === "}") root.moveYear(1)
-        else if (t === "t" || t === "T") root.goToToday()
+        else if (t === "t" || t === "T") {
+          root.goToToday()
+          root.clearDay()
+        }
         else if (t === "w" || t === "W") root.toggleWeekStart()
         else if (t === "j" || t === "J") root.joinNext()
         else if (t === "o" || t === "O") root.openRenCal()
@@ -766,13 +849,17 @@ Panel {
 
                     Rectangle {
                       required property var modelData
+                      readonly property bool selected: modelData.key === root.selectedDayKey
 
                       width: root.cellWidth
                       height: root.cellHeight
                       radius: Style.cornerRadius
                       // Today is outlined, not filled: a lit-up block shouts
-                      // over a grid this quiet.
-                      color: "transparent"
+                      // over a grid this quiet. The only filled day is the
+                      // one picked for the event list below.
+                      color: selected ? Style.selectedFillFor(root.contentForeground, Color.accent)
+                        : dayMouse.containsMouse ? Style.hoverFillFor(root.contentForeground, Color.accent)
+                        : "transparent"
                       border.width: modelData.today ? Style.spacing.hairline : 0
                       border.color: Style.normalBorderFor(root.contentForeground, Color.accent)
 
@@ -780,12 +867,21 @@ Panel {
                         textFormat: Text.PlainText
                         anchors.centerIn: parent
                         text: modelData.day
-                        color: modelData.inMonth
+                        color: parent.selected ? Style.selectedStateColor(root.contentForeground, Color.accent)
+                          : modelData.inMonth
                           ? (modelData.weekend ? Qt.darker(root.contentForeground, 1.45) : root.contentForeground)
                           : Qt.darker(root.contentForeground, 2.2)
                         font.family: root.contentFontFamily
                         font.pixelSize: Style.font.body
-                        font.bold: modelData.today
+                        font.bold: modelData.today || parent.selected
+                      }
+
+                      MouseArea {
+                        id: dayMouse
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: root.selectDay(parent.modelData)
                       }
                     }
                   }
@@ -891,11 +987,22 @@ Panel {
                   id: upcomingLabel
                   anchors.left: parent.left
                   anchors.verticalCenter: parent.verticalCenter
-                  text: "UPCOMING"
+                  text: root.listHeading
                   color: Qt.darker(root.contentForeground, 1.5)
                   font.family: root.contentFontFamily
                   font.pixelSize: Style.font.bodySmall
                   font.letterSpacing: 1
+                }
+
+                PanelActionButton {
+                  visible: root.selectedDayKey !== ""
+                  anchors.right: openRenCalButton.left
+                  anchors.verticalCenter: parent.verticalCenter
+                  iconText: "󰁍"
+                  tooltipText: "Back to upcoming (Esc)"
+                  foreground: root.contentForeground
+                  fontFamily: root.contentFontFamily
+                  onClicked: root.clearDay()
                 }
 
                 PanelActionButton {
@@ -920,6 +1027,7 @@ Panel {
                   : root.upcomingState === "missing-deps" ? "Install python-icalendar and python-recurring-ical-events to show events."
                   : root.upcomingState === "no-calendars" ? "No calendars yet. Open renCal to connect one."
                   : root.upcomingState === "error" ? "Couldn't read your calendars."
+                  : root.selectedDayKey !== "" ? "Nothing on " + root.labelLocale.toString(root.dateFromKey(root.selectedDayKey), "dddd d MMMM") + "."
                   : "Nothing in the next " + root.daysAhead + (root.daysAhead === 1 ? " day." : " days.")
                 color: Qt.darker(root.contentForeground, 1.5)
                 font.family: root.contentFontFamily
@@ -933,7 +1041,7 @@ Panel {
                 Rectangle {
                   id: eventRow
                   required property var modelData
-                  readonly property bool joinable: modelData.joinUrl !== ""
+                  readonly property bool joinable: modelData.joinUrl !== "" && modelData.end > root.nowMs
                   readonly property bool joinNow: root.inJoinWindow(modelData)
 
                   width: upcomingColumn.width

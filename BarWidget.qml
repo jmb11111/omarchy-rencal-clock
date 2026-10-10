@@ -81,6 +81,20 @@ BarWidget {
     if (panelLoader.item) panelLoader.item.toggleWeekStart()
   }
 
+  // Opening resets the panel to Upcoming, so the day is applied after it.
+  function showDay(key) {
+    var panel = panelLoader.item
+    if (!panel) return
+    if (key !== "" && !/^\d{4}-\d{2}-\d{2}$/.test(key)) return
+    if (!root.opened) root.open()
+    if (key !== "") {
+      var date = panel.dateFromKey(key)
+      panel.viewYear = date.getFullYear()
+      panel.viewMonth = date.getMonth()
+    }
+    if (key !== panel.selectedDayKey) panel.showDay(key)
+  }
+
   // The clock fills more slot than it paints a mark for, at both
   // orientations: horizontally it is a text label in a padded slot, so the
   // dot takes the label width; vertically it is a stack of icon-sized lines,
@@ -141,6 +155,9 @@ BarWidget {
     function show(): void { root.open() }
     function hide(): void { root.close() }
     function toggle(): void { root.togglePanel() }
+    // Open on one day's events (YYYY-MM-DD), or back on the Upcoming list.
+    function showDay(key: string): void { root.showDay(key) }
+    function showUpcoming(): void { root.showDay("") }
   }
 
   WidgetButton {
