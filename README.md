@@ -41,6 +41,16 @@ The plugin replaces the stock `omarchy.clock` in place and keeps its settings
 (label format etc.). Anything that already talks to `omarchy.clock` over IPC,
 such as `omarchy-shell omarchy.clock toggle` or a keybinding, keeps working.
 
+## Remove
+
+```bash
+omarchy plugin remove jmb11111.rencal-clock
+```
+
+This puts the stock Omarchy clock back in the same bar position. The Python
+packages above can be removed separately with `sudo pacman -Rs` if nothing
+else needs them.
+
 ## Using it
 
 | Action | Result |
