@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "id": "jmb11111.rencal-clock",
+  "name": "renCal Clock",
+  "version": "0.1.0",
+  "author": "jmb11111",
+  "license": "MIT",
+  "description": "Omarchy's clock and calendar popup, plus your upcoming renCal events with one-click Join buttons for video calls.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "renCal Clock",
+    "description": "Date/time label; click for the month calendar and your next renCal events, with Join buttons for Meet, Zoom, Teams and more.",
+    "category": "Time",
+    "aliases": [
+      "clock",
+      "calendar",
+      "rencal"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "center",
+    "defaults": {
+      "daysAhead": 7,
+      "maxEvents": 8,
+      "hideWorkingLocation": true
+    },
+    "schema": [
+      {
+        "key": "daysAhead",
+        "type": "integer",
+        "label": "Days ahead",
+        "min": 1,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 7,
+        "description": "How far ahead the Upcoming list looks."
+      },
+      {
+        "key": "maxEvents",
+        "type": "integer",
+        "label": "Maximum events",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 8
+      },
+      {
+        "key": "hideWorkingLocation",
+        "type": "boolean",
+        "label": "Hide working-location entries",
+        "defaultValue": true,
+        "description": "Skips Google Calendar's all-day \"Home\" / \"Office\" working-location events."
+      }
+    ]
+  },
+  "omarchy": {
+    "clonedFrom": "omarchy.clock"
+  }
+}
